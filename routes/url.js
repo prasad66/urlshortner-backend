@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
 const { user, urlDB } = require('../config/dbconfig')
-const { hashing, hashCompare, createJWT, authenticate, getUser, emailFromToken, sendMail, deleteUser, getUrl } = require('../utils/util')
+const { hashing, hashCompare, createJWT, authenticate, getUser, emailFromToken, sendResetMail, sendActivationMail, deleteUser, getUrl } = require('../utils/util')
 const JWTD = require('jwt-decode')
 const Crypto = require('crypto')
 
@@ -15,8 +15,9 @@ router.post('/register', async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
   const hashedPassword = await hashing(password);
   const loginUser = await getUser(email)
+  console.log(loginUser)
   try {
-    if (loginUser) {
+    if (loginUser?.email) {
       res.status(400).json({ message: 'User already exists' }) //400 for bad request
       return;
     } else {
@@ -31,10 +32,10 @@ router.post('/register', async (req, res) => {
         activateString: activateString,
       });
 
-      // const link = `${process.env.FRONTEND_URL}/activate/${activateJWT}` //change to frontend url
-      const link = `${process.env.API_URL}/activate/${activateJWT}/${activateString}` //change to frontend url
+      const link = `${process.env.FRONTEND_URL}/activate/${activateJWT}/${activateString}` //change to frontend url
+      // const link = `${process.env.API_URL}/activate/${activateJWT}/${activateString}` //change to frontend url
 
-      let sentMail = sendMail(email, link)
+      let sentMail = sendActivationMail(email, link)
       if (sentMail) {
         res.status(201).json({ message: 'User created successfully and mail sent' }) // 200 for user creation
       }
@@ -46,11 +47,11 @@ router.post('/register', async (req, res) => {
     }
   } catch (error) {
     console.log(error)
-    res.status(500).json({ message: 'Internal Server Error catch', error: error.message })
+    res.status(500).json({ message: 'Internal Server Error catch', error })
   }
 })
 
-router.get('/activate/:token/:activateString', async (req, res) => {
+router.get('/activate/:token/:activateString', authenticate, async (req, res) => {
   const { token, activateString } = req.params;
   try {
     const email = await emailFromToken(token);
@@ -62,7 +63,7 @@ router.get('/activate/:token/:activateString', async (req, res) => {
     }    // res.send({ message: 'inside activate' });
     if (dbUser.activateString === activateString) {
       const updateUser = await user.findOneAndUpdate({ email: email }, { accountActive: true, activateString: '' }, { new: true });
-      res.status(200).send({ message: 'Account activated' });
+      res.status(200).send({ message: 'Account activated', updateUser });
     } else {
       res.status(400).send({ message: 'Link not valid or link already used' });
     }
@@ -118,8 +119,8 @@ router.post('/forgot-password', async (req, res) => {
       const resetJWT = await createJWT({ email, string }, 'verify')
       const doc = await user.findOneAndUpdate({ email: email }, { verifyString: string }, { new: true })
       // const link = `${process.env.FRONTEND_URL}/reset-password/${string}` //change to frontend url
-      const link = `${process.env.API_URL}/forgot-password/verify/${resetJWT}/${string}`;
-      const sentMail = sendMail(email, link)
+      const link = `${process.env.FRONTEND_URL}/forgot-password-redirect/${resetJWT}/${string}`;
+      const sentMail = sendResetMail(email, link)
       if (sentMail) {
         res.status(200).send({ message: 'Mail sent' });
       } else {
@@ -154,6 +155,7 @@ router.post('/forgot-password/verify/:token/:string', authenticate, async (req, 
   }
 })
 
+
 router.post('/reset-password', async (req, res) => {
   const token = req.header('token');
   const { password } = req.body;
@@ -169,7 +171,7 @@ router.post('/reset-password', async (req, res) => {
       res.status(200).send({ message: 'Password reset' });
     } catch (error) {
       console.log(error);
-      res.status(500).send({ message: 'Internal Server Error',error });
+      res.status(500).send({ message: 'Internal Server Error', error });
     }
   }
 
@@ -247,26 +249,13 @@ router.get('/url/:customUrl', async (req, res) => {
   }
 })
 
-router.get('/url/getone', async (req, res) => {
-  // const data = await urlDB.findOne({ email: "npsd64@gmail.com" , url: "https://www.google.com" });
-  const data = await getUrl("cnarasimharaju0569@gmail.com", "https://www.sass.com")
-  // const date = data.createdAt;
-  // console.log(new Date(date) > new Date(2022, 00, 15))
-  const result = data.filter(link => link.url === 'https://www.sass.com')
-  console.log(data)
-  res.status(200).send({ message: 'url created', result });
-})
-
-router.post('/delete', async (req, res) => {
-  const email = 'ndpk.prasad@gmail.com'
-  const newUser = await user.findOneAndDelete({ email: email })
-  res.status(200).json({ message: 'User deleted successfully', newUser })
-})
-
-router.get('/mail', async (req, res) => {
-  const email = 'npsd64@gmail.com'
-  let sentMail = await sendMail(email, 'link')
-  res.send({ message: 'sent', sentMail })
+router.get('/urlinfo', authenticate, async (req, res) => {
+  const email = req.header("email");
+  const data = await urlDB.find({ email: email });
+  const total = data.length
+  const todayCount = data.filter(url => url.createdAt.getDate() === new Date().getDate() && url.createdAt.getMonth() === new Date().getMonth() && url.createdAt.getFullYear() === new Date().getFullYear())?.length
+  const monthCount = data.filter(url => url.createdAt.getMonth() === new Date().getMonth() && url.createdAt.getFullYear() === new Date().getFullYear()).length
+  res.status(200).send({ todayCount, monthCount,total });
 })
 
 module.exports = router;
