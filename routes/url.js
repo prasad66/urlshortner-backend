@@ -194,7 +194,7 @@ router.post('/url/createurl', authenticate, async (req, res) => {
       res.status(400).send({ message: 'Url already exists' });
     } else {
       const randomString = customUrl ? customUrl : string
-      const shortLink = `${process.env.API_URL}/url/redirect/${randomString}`;
+      const shortLink = `${process.env.API_URL}/url/${randomString}`;
       console.log("random string ***********************************" + randomString)
       const date = new Date();
       const createdAt = new Date(`${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`);
