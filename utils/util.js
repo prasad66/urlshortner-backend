@@ -64,6 +64,7 @@ const emailFromToken = async (token) => {
 
 }
 
+
 const sendActivationMail = (to, link) => {
     try {
         var transporter = nodemailer.createTransport({
